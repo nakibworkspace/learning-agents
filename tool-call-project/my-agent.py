@@ -58,75 +58,174 @@ tools = [
                 "required": ["city"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Search the web for information and return a list of results with title, URL, and snippet",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query, e.g. 'latest NVIDIA earnings'"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default 5, max 10)",
+                        "minimum": 1,
+                        "maximum": 10
+                    }
+                },
+                "required": ["query"]
+            }
+        }
     }
 ]
 
 # define python function for the tool
-# def get_current_weather(city: str, unit: str = "celsius"):
+def get_current_weather(city: str, unit: str = "celsius"):
 
-#     # Geocode city -> latitude/longitude
-#     geo = requests.get(
-#         "https://geocoding-api.open-meteo.com/v1/search",
-#         params={
-#             "name": city,
-#             "count": 1
-#         }
-#     ).json()
+    # Geocode city -> latitude/longitude
+    geo = requests.get(
+        "https://geocoding-api.open-meteo.com/v1/search",
+        params={
+            "name": city,
+            "count": 1
+        }
+    ).json()
 
-#     lat = geo["results"][0]["latitude"]
-#     lon = geo["results"][0]["longitude"]
+    lat = geo["results"][0]["latitude"]
+    lon = geo["results"][0]["longitude"]
 
-#     # Get weather
-#     weather = requests.get(
-#         "https://api.open-meteo.com/v1/forecast",
-#         params={
-#             "latitude": lat,
-#             "longitude": lon,
-#             "current": "temperature_2m,weather_code",
-#             "temperature_unit": unit
-#         }
-#     ).json()
+    # Get weather
+    weather = requests.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,weather_code",
+            "temperature_unit": unit
+        }
+    ).json()
 
-#     temp = weather["current"]["temperature_2m"]
+    temp = weather["current"]["temperature_2m"]
 
-#     return {
-#         "city": city,
-#         "temperature": temp,
-#         "unit": unit
-#     }
-
-## for learning purpose, we are using dummy data
-def get_current_weather(city, unit="celsius"):
     return {
         "city": city,
-        "temperature": 30,
+        "temperature": temp,
         "unit": unit
     }
 
 
-def calculate(expression):
-    # Just for our learning experiment
-    return eval(expression)
+# Safe calculator: parses a math expression and evaluates it without using eval()
+# (Never give a model direct access to eval — it can execute arbitrary Python.)
+import ast
+import operator
 
 
-def get_time(city):
+def calculate(expression: str):
+    # Whitelist of allowed binary operators
+    _binops = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+    }
+    _unops = {
+        ast.UAdd: operator.pos,
+        ast.USub: operator.neg,
+    }
+
+    def _eval(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in _binops:
+            return _binops[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _unops:
+            return _unops[type(node.op)](_eval(node.operand))
+        raise ValueError(f"Unsupported expression node: {ast.dump(node)}")
+
+    tree = ast.parse(expression, mode="eval")
+    return {"expression": expression, "result": _eval(tree.body)}
+
+
+def get_time(city: str):
+    # Look up the city's timezone via the Open-Meteo geocoding API
+    # (same free, no-key endpoint we already use for weather).
+    geo = requests.get(
+        "https://geocoding-api.open-meteo.com/v1/search",
+        params={"name": city, "count": 1}
+    ).json()
+
+    timezone = geo["results"][0]["timezone"]
+
+    # Ask Open-Meteo for the current time in that timezone.
+    # Passing latitude/longitude is required by the API but ignored
+    # when we only request `current=...`.
+    lat = geo["results"][0]["latitude"]
+    lon = geo["results"][0]["longitude"]
+    resp = requests.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m",
+            "timezone": timezone,
+        }
+    ).json()
+
     return {
         "city": city,
-        "time": "03:30 PM"
+        "timezone": timezone,
+        "datetime": resp["current"]["time"],
+    }
+
+
+# DuckDuckGo web search (no API key required).
+# pip install duckduckgo-search
+from duckduckgo_search import DDGS
+
+
+def search_web(query: str, max_results: int = 5):
+    # Clamp to a sensible range — DDGS will complain or return junk if you
+    # ask for too many results.
+    max_results = max(1, min(int(max_results), 10))
+
+    results = []
+    # DDGS() is a context manager. The .text() method returns an iterator
+    # of dicts with keys: title, href, body.
+    with DDGS() as ddgs:
+        for r in ddgs.text(query, max_results=max_results):
+            results.append({
+                "title": r.get("title"),
+                "url": r.get("href"),
+                "snippet": r.get("body"),
+            })
+
+    return {
+        "query": query,
+        "result_count": len(results),
+        "results": results,
     }
 
 # map tool name to function
 available_functions = {
     "get_current_weather": get_current_weather,
     "calculate": calculate,
-    "get_time": get_time
+    "get_time": get_time,
+    "search_web": search_web,
 }
 
 # initialize conversation
 messages = [
     {
         "role": "user",
-        "content": "What time is it in Tokyo? What's the weather there? What is 45*32?"
+        "content": "What time is it in Tokyo? Search for the latest news about NVIDIA."
     }
 ]
 
@@ -188,6 +287,10 @@ while True:
             messages.append({
                 "role": "tool",
                 "tool_name": function_name,
+                # tool_call_id is required by the chat protocol so the model
+                # can associate each tool result with the specific call it
+                # answers. Without it, multi-tool rounds can confuse the model.
+                "tool_call_id": getattr(tool_call, "id", None) or tool_call.function.name,
                 "content": str(result)
             })
 
