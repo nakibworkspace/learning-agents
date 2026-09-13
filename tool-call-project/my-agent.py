@@ -141,6 +141,16 @@ def calculate(expression: str):
         ast.USub: operator.neg,
     }
 
+    def calculate(expression):
+      tree = ast.parse(expression, mode="eval")
+      for node in ast.walk(tree):
+          if isinstance(node, ast.Call):
+              return {
+                  "error": "calculate only supports pure arithmetic. "
+                           "Use numeric literals from prior tool results; "
+                           "do not call other tools inside the expression."
+              }
+
     def _eval(node):
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return node.value
@@ -273,9 +283,13 @@ while True:
             function_to_call = available_functions.get(function_name)
 
             if function_to_call:
-
                 # Execute Python function
-                result = function_to_call(**arguments)
+                try:
+                    result = function_to_call(**arguments)
+                except Exception as e:
+                    result = {
+                        "error": f"{type(e).__name__}: {str(e)}"
+                    }
 
                 print("\nTOOL RESULT:")
                 print(result)
