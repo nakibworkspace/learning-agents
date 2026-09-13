@@ -222,10 +222,14 @@ available_functions = {
 }
 
 # initialize conversation
+user_prompt = input("You: ").strip()
+if not user_prompt:
+    raise SystemExit("Empty prompt — nothing to ask the agent.")
+
 messages = [
     {
         "role": "user",
-        "content": "What time is it in Tokyo? Search for the latest news about NVIDIA."
+        "content": user_prompt
     }
 ]
 
@@ -294,14 +298,14 @@ while True:
                 "content": str(result)
             })
 
-        # ask model again with tool result
-        final_response = chat(
-            model="llama3.2:latest",
-            messages=messages
-        )
+        # # ask model again with tool result
+        # final_response = chat(
+        #     model="llama3.2:latest",
+        #     messages=messages
+        # )
 
-        print("\nFINAL ANSWER:")
-        print(final_response.message.content)
+        # print("\nFINAL ANSWER:")
+        # print(final_response.message.content)
 
-        # Stop looping — we got our answer
-        break
+        # # Stop looping — we got our answer
+        # break
