@@ -6,4 +6,5 @@ Initial plan was to understand and make an agent with the basics of LangGraph fr
 
 ### Basic Architecture
 
-![img]()
+![img](https://raw.githubusercontent.com/nakibworkspace/learning-agents/eec99615a28e8c8256aae7e99f609455fbac8a7b/assets/research_agent.svg)
+
