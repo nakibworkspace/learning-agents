@@ -231,40 +231,70 @@ available_functions = {
     "search_web": search_web,
 }
 
-# initialize conversation
-user_prompt = input("You: ").strip()
-if not user_prompt:
-    raise SystemExit("Empty prompt — nothing to ask the agent.")
+# tool execution function
+def execute_tool(tool_call):
 
-messages = [
-    {
-        "role": "user",
-        "content": user_prompt
-    }
-]
+    function_name = tool_call.function.name
+    arguments = tool_call.function.arguments
 
-while True:
-    # ask the model
-    response = chat(
-        model="llama3.2:latest",
-        messages=messages,
-        tools=tools
-    )
+    function_to_call = available_functions.get(function_name)
 
-    # model didn't call the tool
-    if not response.message.tool_calls:
-        print("\nMODEL ANSWER:")
-        print(response.message.content)
-        break
+    # Tool doesn't exist
+    if function_to_call is None:
 
-    # check whether the model called the tool
-    if response.message.tool_calls:
+        return {
+            "error": f"Tool '{function_name}' not found"
+        }
 
-        # Add the assistant's tool-call message to history
-        ## model requested for one or more tools
+    # Execute tool safely
+    try:
+
+        result = function_to_call(**arguments)
+
+        return result
+
+    except Exception as e:
+
+        return {
+            "error": f"{type(e).__name__}: {str(e)}"
+        }
+
+
+# agent loop
+def run_agent(user_prompt):
+
+    # AGENT STATE
+    messages = [
+        {
+            "role": "user",
+            "content": user_prompt
+        }
+    ]
+
+    MAX_STEPS = 10
+
+    for step in range(MAX_STEPS):
+
+        print(
+            f"\n========== AGENT STEP {step + 1} =========="
+        )
+
+        # SEND CURRENT STATE TO LLM
+        response = chat(
+            model="llama3.2:latest",
+            messages=messages,
+            tools=tools
+        )
+
+        # DID THE LLM FINISH?
+        if not response.message.tool_calls:
+
+            return response.message.content
+
+        # SAVE LLM TOOL CALL TO STATE
         messages.append(response.message)
 
-        # There can be multiple tool calls
+        # EXECUTE EACH REQUESTED TOOL
         for tool_call in response.message.tool_calls:
 
             function_name = tool_call.function.name
@@ -273,53 +303,43 @@ while True:
             print("\nMODEL WANTS TO CALL:")
             print(function_name)
 
-            print("ARGUMENTS:")
+            print("\nARGUMENTS:")
             print(arguments)
 
-            # ----------------------------------------------------
-            # Find the actual Python function
-            # ----------------------------------------------------
+            # Execute tool
+            result = execute_tool(tool_call)
 
-            function_to_call = available_functions.get(function_name)
+            print("\nTOOL RESULT:")
+            print(result)
 
-            if function_to_call:
-                # Execute Python function
-                try:
-                    result = function_to_call(**arguments)
-                except Exception as e:
-                    result = {
-                        "error": f"{type(e).__name__}: {str(e)}"
-                    }
-
-                print("\nTOOL RESULT:")
-                print(result)
-
-            else:
-
-                result = f"Tool {function_name} not found"
-
-            # ----------------------------------------------------
-            # Give tool result back to the model
-            # ----------------------------------------------------
-
+            # SAVE TOOL RESULT TO AGENT STATE
             messages.append({
                 "role": "tool",
                 "tool_name": function_name,
-                # tool_call_id is required by the chat protocol so the model
-                # can associate each tool result with the specific call it
-                # answers. Without it, multi-tool rounds can confuse the model.
-                "tool_call_id": getattr(tool_call, "id", None) or tool_call.function.name,
+                "tool_call_id": (
+                    getattr(tool_call, "id", None)
+                    or function_name
+                ),
                 "content": str(result)
             })
 
-        # # ask model again with tool result
-        # final_response = chat(
-        #     model="llama3.2:latest",
-        #     messages=messages
-        # )
+    # MAXIMUM STEPS REACHED
+    return (
+        "Agent stopped because it reached "
+        "the maximum number of steps."
+    )
 
-        # print("\nFINAL ANSWER:")
-        # print(final_response.message.content)
 
-        # # Stop looping — we got our answer
-        # break
+# 6. PROGRAM ENTRY POINT
+user_prompt = input("\nYou: ").strip()
+
+if not user_prompt:
+
+    raise SystemExit(
+        "Empty prompt — nothing to ask the agent."
+    )
+
+answer = run_agent(user_prompt)
+
+print("\nMODEL ANSWER:")
+print(answer)
