@@ -19,3 +19,19 @@ Agent loop is applied to the agent in order to gain best reasoning of the model.
 
 ![img](loop)
 
+### Tools
+Giving tools to the model in order to make sure the agent handles the case sensitivities. For example, if the model decides "I need to reresearch" in plain english but currently the agents decides using conditional edge where the conditions are defined in a very hardcoded way
+
+```python
+def should_continue(state: State) -> Literal["research", "summary", END]:
+    last = state["messages"][-1].content
+    if "RESEARCH" in last:
+        return "research"
+    if "FINAL" in last:
+        return END
+    return "summary"
+```
+
+Model adds punctuation: "RESEARCH: " vs "RESEARCH" --> Works, but easy to break!
+
+So we used tools to make the model outputs more structured and add varsatility.
