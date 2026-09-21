@@ -1,48 +1,26 @@
 from langgraph.graph import StateGraph, START, END
-from typing import TypedDict
+from typing import TypedDict, Annotated
 from langchain_ollama import ChatOllama
+from langchain_core.messages import SystemMessage
+from langgraph.graph.message import add_messages
 
 class State(TypedDict):
-    question: str
-    research: str
-    summary: str
+    messages: Annotated[list, add_messages]
 
 llm = ChatOllama(model="llama3.2:latest", temperature=0.0)
 
+RESEARCH_SYSTEM = "You are a researcher. Gather relevant facts. Do not answer the user directly."
+SUMMARY_SYSTEM = "You are a writer. Summarize the research above for the user in clear language."
+
 def research_node(state: State):
-
-    question = state["question"]
-
-    response = llm.invoke(
-        f"""
-        Research the following topic.
-
-        Topic:
-        {question}
-
-        Write detailed research notes.
-        """
-    )
-
-    state["research"] = response.content
-
-    return state
+    msgs = state["messages"] + [SystemMessage(content=RESEARCH_SYSTEM)]
+    response = llm.invoke(msgs)
+    return {"messages": [response]}
 
 def summary_node(state: State):
-
-    notes = state["research"]
-
-    response = llm.invoke(
-        f"""
-        Summarize the following research notes.
-
-        Notes:
-        {notes}
-        """
-    )
-
-    state["summary"] = response.content
-    return state
+    msgs = state["messages"] + [SystemMessage(content=SUMMARY_SYSTEM)]
+    response = llm.invoke(msgs)
+    return {"messages": [response]}
 
 graph = StateGraph(State)
 
@@ -56,12 +34,7 @@ graph.add_edge("summary", END)
 agent = graph.compile()
 
 result = agent.invoke(
-    {
-        "question": "What is LangGraph?",
-        "research": "",
-        "summary": "",
-    }
+    {"messages": [("user", "What is LangGraph?")]}
 )
 
 print(result)
-
