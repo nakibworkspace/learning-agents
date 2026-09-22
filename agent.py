@@ -3,6 +3,7 @@ from typing import TypedDict, Annotated, Literal
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.tools import tool
 
 class State(TypedDict):
@@ -32,7 +33,8 @@ AGENT_SYSTEM = """You are an agent. Decide what to do next.
      FINAL: <your final answer>"""
 
 def agent_node(state: State):
-    msgs = state["messages"] + [SystemMessage(content=AGENT_SYSTEM)]
+    # msgs = state["messages"] + [SystemMessage(content=AGENT_SYSTEM)]   # reason: forces RESEARCH/FINAL format, fights a plain Q&A memory test
+    msgs = state["messages"]
     response = llm_with_tools.invoke(msgs)
     return {"messages": [response]}
 
@@ -65,10 +67,30 @@ graph.add_edge(START, "agent")
 graph.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
 graph.add_edge("tools", "agent")
 
-agent = graph.compile()
+checkpointer = InMemorySaver()
+agent = graph.compile(checkpointer=checkpointer)
 
-result = agent.invoke(
-    {"messages": [("user", "What is LangGraph?")]}
+config = {"configurable": {"thread_id": "1"}}
+
+# Turn 1 — establish identity
+result1 = agent.invoke(
+    {"messages": [("user", "My name is Raj. Remember it.")]},
+    config=config,
 )
+print("=== TURN 1 ===")
+print(result1["messages"][-1].content)
+print()
 
-print(result)
+# Turn 2 — ask the agent to recall (no re-telling, same thread_id)
+result2 = agent.invoke(
+    {"messages": [("user", "What's my name?")]},
+    config=config,
+)
+print("=== TURN 2")
+print(result2["messages"][-1].content)
+print()
+
+# Show the full conversation history the agent now sees
+print("=== FULL HISTORY ON THIS THREAD ===")
+for m in result2["messages"]:
+    print(f"[{type(m).__name__}] {m.content}")

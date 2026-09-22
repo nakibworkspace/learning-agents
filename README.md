@@ -35,3 +35,12 @@ def should_continue(state: State) -> Literal["research", "summary", END]:
 Model adds punctuation: "RESEARCH: " vs "RESEARCH" --> Works, but easy to break!
 
 So we used tools to make the model outputs more structured and add varsatility.
+
+### Memory
+To store the messages/conversations, memory is needed for an agent. Memory aka Persistence, 2 types: Checkpointers(short-term, single thread) and Stores(long-term, across threads)
+
+#### Checkpointers
+short term memory for one session. Works on single thread, when loop invokes the memory persists.
+
+
+
