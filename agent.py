@@ -94,3 +94,24 @@ print()
 print("=== FULL HISTORY ON THIS THREAD ===")
 for m in result2["messages"]:
     print(f"[{type(m).__name__}] {m.content}")
+
+# === STREAMING DEMO ===
+print("\n=== STREAMING (per-node) ===")
+for chunk in agent.stream(
+    {"messages": [("user", "What is Python?")]},
+    config={"configurable": {"thread_id": "stream_demo"}},
+):
+    # chunk = {node_name: {state_field: new_value}}
+    node_name = list(chunk.keys())[0]
+    state_update = chunk[node_name]
+    msgs = state_update.get("messages", [])
+    for m in msgs:
+        kind = type(m).__name__
+        if kind == "AIMessage":
+            print(f"  [{node_name}] AIMessage: {m.content!r}")
+            if m.tool_calls:
+                print(f"           tool_calls: {[(tc['name'], tc['args']) for tc in m.tool_calls]}")
+        elif kind == "ToolMessage":
+            print(f"  [{node_name}] ToolMessage: {m.content!r}")
+        else:
+            print(f"  [{node_name}] {kind}: {m.content!r}")
