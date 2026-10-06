@@ -5,3 +5,4 @@ context.md
 hf-migration.md
 langgraph-doc.png
 thinking.md
+__pycache__/
